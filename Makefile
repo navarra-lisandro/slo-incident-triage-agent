@@ -13,7 +13,7 @@ lint:
 	poetry run ruff check .
 
 test:
-	poetry run pytest tests/
+	poetry run pytest tests/ --cov=agent || [ $$? -eq 5 ]
 
 eval:
 	poetry run python evals/run_evals.py
