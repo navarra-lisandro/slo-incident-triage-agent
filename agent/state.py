@@ -4,7 +4,7 @@ agent/state.py
 Agent state definition for the SLO incident triage agent.
 This is the single data structure that flows between all nodes in the graph.
 
-Structure mirrors options-income-advisor-agent/agent/state.py pattern:
+Structure mirrors commonly used pattern:
 - TypedDict for the main state
 - Nested TypedDicts for complex sub-structures
 - All fields explicitly typed
