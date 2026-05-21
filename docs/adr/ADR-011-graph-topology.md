@@ -59,29 +59,30 @@ flowchart TD
 
 ## Happy Path vs Full Path
 
-```mermaid
-flowchart LR
-    subgraph happy["Happy Path (7 nodes)\nknown provider + no cloud tag"]
-        direction TB
-        h1[ingest_incident] --> h2[assess_slo_impact]
-        h2 --> h3[triage_firing_signals]
-        h3 --> h4[classify_severity]
-        h4 --> h5[query_runbook]
-        h5 --> h6[generate_remediation]
-        h6 --> h7[draft_summary]
-    end
+## Happy Path (7 nodes — known provider, no cloud tag)
 
-    subgraph full["Full Path (9 nodes)\nunknown provider + cloud tag present"]
-        direction TB
-        f1[ingest_incident] --> f2[normalize_incident]
-        f2 --> f3[assess_slo_impact]
-        f3 --> f4[check_cloud_status]
-        f4 --> f5[triage_firing_signals]
-        f5 --> f6[classify_severity]
-        f6 --> f7[query_runbook]
-        f7 --> f8[generate_remediation]
-        f8 --> f9[draft_summary]
-    end
+```mermaid
+flowchart TD
+    A[ingest_incident] --> B[assess_slo_impact]
+    B --> C[triage_firing_signals]
+    C --> D[classify_severity]
+    D --> E[query_runbook]
+    E --> F[generate_remediation]
+    F --> G[draft_summary]
+```
+
+## Full Path (9 nodes — unknown provider + cloud tag present)
+
+```mermaid
+flowchart TD
+    A[ingest_incident] --> B[normalize_incident]
+    B --> C[assess_slo_impact]
+    C --> D[check_cloud_status]
+    D --> E[triage_firing_signals]
+    E --> F[classify_severity]
+    F --> G[query_runbook]
+    G --> H[generate_remediation]
+    H --> I[draft_summary]
 ```
 
 ## Node Rationale
