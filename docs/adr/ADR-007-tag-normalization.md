@@ -82,3 +82,36 @@ The following tag keys have first-class meaning in the agent:
 - Unit tests must cover tag normalization including duplicate keys,
   missing colons, and multi-source merging
 - Adding new first-class tag keys requires updating this ADR
+
+## Recommended Tag Conventions for Ownership Inference
+
+The following tag keys are recommended but not required. Claude infers
+ownership and downstream impact from all available tag values and
+notification literals without requiring a rigid schema (Option B —
+see state.py RemediationStep docstring and Friction Log #4).
+
+  owner       recommended — who to page for this service
+              maps to PagerDuty handle or on-call rotation
+              e.g. owner:payments-oncall
+
+  team        who broadly owns the service
+              may overlap with owner
+              e.g. team:payments
+
+  downstream  services that consume this service
+              used to identify blast radius and notification targets
+              e.g. downstream:checkout, downstream:backoffice
+
+  notify      notification literals — email, Slack, PagerDuty handles
+              e.g. notify:@payments-team@company.com
+              e.g. notify:@slack-payments-alerts
+
+  pagerduty   PagerDuty escalation policy or service name
+              e.g. pagerduty:payments-escalation
+
+  runbook     link to the service runbook
+              e.g. runbook:https://wiki.internal/runbooks/checkout
+
+Claude reads all of the above — including stale or inconsistent values —
+and uses judgment to infer the most likely current owner and downstream
+consumers. This is an explicit design decision documented in Friction Log #4.

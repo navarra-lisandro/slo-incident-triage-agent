@@ -108,3 +108,43 @@ https://docs.newrelic.com/docs/alerts/get-notified/message-templates/
 canonical payload format for SLO/alert webhook integrations, similar
 to Datadog's webhook payload reference. The current Handlebars
 template approach gives flexibility but sacrifices interoperability.
+---
+
+## Friction #4 — Tag ownership inference requires human judgment
+             at scale — offloaded to Claude
+
+**Discovery:** During state design — RemediationStep ownership model.
+
+**Problem:** In large organizations, monitors accumulate tags over years
+of ownership changes, team reorganizations, and inconsistent tagging
+conventions. A single monitor may have:
+
+  team:payments                        original owner
+  team:backoffice                      current consumer
+  notify:@old-team-dl@company.com      stale distribution list
+  owner:platform-team                  added during reliability audit
+  pagerduty:checkout-escalation        routing from 2 reorgs ago
+
+No deterministic rule can reliably identify the correct escalation
+path from this tag soup. A senior SRE uses judgment — reading the
+full context of the monitor, its service, and the notification
+literals to infer who actually owns it today.
+
+**Impact:** Rules-based ownership resolution fails silently in large
+organizations. The wrong team gets paged, or no one gets paged, and
+the incident escalates unnecessarily.
+
+**v1 approach:** Claude infers responsible teams and downstream impact
+from all available tag values and notification literals (owner:, team:,
+notify:, pagerduty:, downstream:, email addresses, Slack handles)
+without requiring a rigid tag schema. The draft_summary surfaces the
+inferred ownership and available tag evidence so the on-call engineer
+can apply their own judgment.
+
+**Consequence:** Ownership inference quality depends on tag richness.
+Sparse or stale tags produce weaker ownership recommendations.
+
+**Suggested improvement:** LangGraph / LangSmith documentation should
+include a pattern for LLM-assisted metadata inference from unstructured
+or inconsistent tag sets — this is a common enterprise reliability
+engineering problem with no deterministic solution.
