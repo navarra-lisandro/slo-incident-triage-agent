@@ -163,3 +163,26 @@ fast and avoids unnecessary external network calls.
   the state schema, and the graph wiring in graph.py
 - The Mermaid diagrams in this ADR are the authoritative topology
   record — the README contains the same diagrams for visibility
+
+## SignalAssessment Role Taxonomy Update
+
+The signal correlation role taxonomy was updated from the initial design.
+The original CORRELATED value was replaced with UPSTREAM and DOWNSTREAM
+to convey causal direction rather than mere correlation:
+
+  PRIMARY       signal is the primary driver of SLO burn
+  CONTRIBUTING  signal is independently degraded, adding to burn
+  UPSTREAM      signal is causing another signal to degrade
+                e.g. CPU saturation causing p99 latency spike
+  DOWNSTREAM    signal is a symptom of another signal
+                e.g. latency spike caused by CPU saturation
+
+Rationale: UPSTREAM/DOWNSTREAM tells the on-call engineer the causal
+direction of signal relationships. This is actionable — fix the UPSTREAM
+signal and the DOWNSTREAM signal should recover on its own. CORRELATED
+alone does not convey this.
+
+Known complexity: UPSTREAM/DOWNSTREAM assignment requires Claude to
+reason about causal direction, which is a harder reasoning task than
+simple classification. Confidence may be lower on complex multi-signal
+incidents where causal direction is ambiguous.
