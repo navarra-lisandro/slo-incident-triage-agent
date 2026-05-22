@@ -96,7 +96,7 @@ SLO burn rate is a required field. Provider-specific paths:
   - [pyrra](https://github.com/pyrra-dev/pyrra)
   - [sloth](https://github.com/slok/sloth)
 - **Grafana** — available if Grafana SLO plugin is configured
-- **New Relic** — available via SLI/SLO tracking feature
+- - **Providers with configurable payloads** (e.g. New Relic) — configure your webhook template to match the external schema, or rely on the conditional normalize_incident node to resolve unknown values automatically
 
 See [ADR-010](docs/adr/ADR-010-payload-schema-design.md) for the
 full payload schema and provider translation tables.
