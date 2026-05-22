@@ -131,7 +131,7 @@ signal:
   another time-series data source. Signal inference follows the
   same pattern as Prometheus — derived from metric names and
   alert labels, not explicit signal fields.
-  
+
   status:
     "alerting"    → "firing"
     "ok"          → "healthy"
@@ -164,10 +164,19 @@ Provider-specific burn rate paths:
                 https://github.com/pyrra-dev/pyrra
                 https://github.com/slok/sloth
   Grafana       available if SLO plugin configured
-  New Relic     available via SLI/SLO tracking feature
   PagerDuty     not applicable — PagerDuty is incident management,
                 not a monitoring source. Payloads should originate
                 from the upstream monitoring provider.
+                
+### Providers with configurable payloads (e.g. New Relic)
+  New Relic webhook payloads are fully customer-defined via Handlebars
+  message templates — no canonical fixed format exists. Integration
+  options:
+  A) Configure the New Relic webhook template to match the external
+     payload schema defined in this ADR
+  B) Rely on the normalize_incident node to resolve unknown values
+     via Claude — see ADR-006
+  See Friction Log #3 for research details.
 
 ## Unknown Value Handling
 
