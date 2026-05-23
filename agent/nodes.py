@@ -408,7 +408,6 @@ GCP_METRIC_PREFIXES: dict[str, str] = {
     "gcp.cloudsql":       "Cloud SQL",
     "gcp.storage":        "Cloud Storage",
     "gcp.pubsub":         "Pub/Sub",
-    "gcp.kubernetes":     "GKE",
     "gcp.run":            "Cloud Run",
     "gcp.functions":      "Cloud Functions",
     "kubernetes.":        "GKE",
