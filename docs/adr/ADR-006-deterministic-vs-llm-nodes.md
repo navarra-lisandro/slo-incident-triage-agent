@@ -63,3 +63,26 @@ budget_state rules:
   belongs in an LLM node
 - This separation is enforced by convention, not by the framework —
   discipline is required to maintain it
+
+## Generic Metric Handoff to Claude
+
+Some metrics cannot be attributed to a specific cloud service
+deterministically. Generic metrics like system.cpu.utilization or
+system.mem.used are valid saturation signals but their cloud service
+dependency cannot be inferred from the metric name alone.
+
+This is the designed handoff between deterministic and LLM layers:
+
+  check_cloud_status    returns all affected cloud services with a
+                        note when metric prefix inference fails
+                        deterministic work is complete at this point
+
+  triage_firing_signals Claude receives the full cloud provider status
+                        and reasons about the relationship between
+                        generic metrics and provider degradation
+                        contextually — no deterministic rule can do this
+
+This pattern intentionally respects the boundary between what
+deterministic code can know (metric prefixes, tag values) and what
+requires contextual reasoning (inferring cloud service dependency
+from generic system metrics coinciding with provider degradation).

@@ -138,3 +138,54 @@ when a provider outage is confirmed.
   a provider handler in check_cloud_status node implementation
 - LangSmith traces will show the HTTP fetch timing per provider,
   making latency observable and debuggable
+
+## Service Dependency Filtering
+
+When a cloud provider status feed returns multiple affected services,
+the agent filters to only those services used by the firing monitors.
+This prevents noise — an AWS Lambda outage is irrelevant if the
+incident involves payments-service which only uses RDS and S3.
+
+### Priority Chain
+
+Priority 1: Metric name prefix inference (objective, system-generated)
+  Cloud-native metrics from Datadog's AWS and GCP integrations follow
+  consistent naming conventions that encode the cloud service:
+    aws.rds.*           -> RDS
+    aws.elasticache.*   -> ElastiCache
+    gcp.cloudsql.*      -> Cloud SQL
+  Metric names are system-generated and cannot be stale.
+  This is the primary and most reliable dependency signal.
+
+Priority 2: Explicit service tags (human annotation, fallback)
+  If metric inference produces no matches, the node reads
+  aws-service: or gcp-service: tags from unified_tags.
+  Service tags are human annotations and may be stale after
+  infrastructure changes, but are useful for custom metrics
+  where the name does not encode the cloud service.
+
+Priority 3: Return all affected services with note (Claude reasons)
+  Generic metrics like system.cpu.utilization or system.mem.used
+  cannot be attributed to a specific cloud service deterministically.
+  In this case the node returns all affected cloud services with a
+  note explaining that dependency could not be determined from metric
+  prefixes. Claude receives the full cloud provider status and reasons
+  contextually:
+
+    "system.cpu.utilization is firing at 91%,
+     AWS EC2 is degraded in us-east-1 —
+     CPU saturation coinciding with EC2 degradation in the same
+     region is consistent with an infrastructure-level issue."
+
+  This is the designed handoff between the deterministic and LLM
+  reasoning layers per ADR-006.
+
+### First-Class Tag Keys for Service Dependency
+
+  aws-service     explicit AWS service dependency
+                  e.g. aws-service:rds, aws-service:s3
+  gcp-service     explicit GCP service dependency
+                  e.g. gcp-service:cloudsql, gcp-service:storage
+
+  These tags are optional. Metric prefix inference is attempted first.
+  See ADR-007 for the full tag convention reference.

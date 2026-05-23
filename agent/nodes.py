@@ -381,30 +381,375 @@ def assess_slo_impact(state: IncidentState) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Private helpers — used by check_cloud_status
+# ---------------------------------------------------------------------------
+
+AWS_METRIC_PREFIXES: dict[str, str] = {
+    "aws.ec2":            "EC2",
+    "aws.rds":            "RDS",
+    "aws.elasticache":    "ElastiCache",
+    "aws.s3":             "S3",
+    "aws.lambda":         "Lambda",
+    "aws.sqs":            "SQS",
+    "aws.alb":            "ALB",
+    "aws.elb":            "ELB",
+    "aws.cloudfront":     "CloudFront",
+    "aws.dynamodb":       "DynamoDB",
+    "aws.kinesis":        "Kinesis",
+    "kubernetes.":        "EKS",
+    "aws.eks":            "EKS",
+    "aws.secretsmanager": "Secrets Manager",
+    "aws.kms":            "KMS",
+}
+
+GCP_METRIC_PREFIXES: dict[str, str] = {
+    "gcp.compute":        "Compute Engine",
+    "gcp.cloudsql":       "Cloud SQL",
+    "gcp.storage":        "Cloud Storage",
+    "gcp.pubsub":         "Pub/Sub",
+    "gcp.kubernetes":     "GKE",
+    "gcp.run":            "Cloud Run",
+    "gcp.functions":      "Cloud Functions",
+    "kubernetes.":        "GKE",
+    "gcp.kubernetes":     "GKE",
+    "gcp.secretmanager":  "Secret Manager",
+    "gcp.cloudkms":       "Cloud KMS",
+}
+
+
+def _infer_service_from_metric(provider: str, metric: str) -> str | None:
+    """
+    Infer cloud service name from metric name prefix.
+    Returns None if no match found.
+    Metric names are system-generated and cannot be stale — this is
+    the primary dependency signal per ADR-009.
+    """
+    prefix_map = (
+        AWS_METRIC_PREFIXES if provider == "aws"
+        else GCP_METRIC_PREFIXES
+    )
+    for prefix, service in prefix_map.items():
+        if metric.startswith(prefix):
+            return service
+    return None
+
+
+def _extract_cloud_services(
+    provider: str,
+    unified_tags: dict[str, list[str]],
+    firing_monitors: list[dict]
+) -> tuple[list[str], str | None]:
+    """
+    Extract cloud services used by firing monitors.
+    Returns (services, note) where note explains the source or
+    any fallback behavior.
+
+    Priority chain (ADR-009):
+      1. metric name prefix inference (objective, system-generated)
+      2. {provider}-service: tags (human annotation, fallback)
+      3. empty list + note (Claude reasons contextually)
+    """
+    # Priority 1 — metric prefix inference
+    inferred: list[str] = []
+    for monitor in firing_monitors:
+        metric = monitor.get("metric", "").lower()
+        service = _infer_service_from_metric(provider, metric)
+        if service and service not in inferred:
+            inferred.append(service)
+
+    if inferred:
+        return inferred, None
+
+    # Priority 2 — explicit service tags
+    tag_key = f"{provider}-service"
+    service_tags = unified_tags.get(tag_key, [])
+    if service_tags:
+        return service_tags, None
+
+    # Priority 3 — no signal available, return all with note
+    return [], (
+        "service dependency could not be determined from metric prefixes "
+        "or service tags — returning all affected services for Claude "
+        "to reason over contextually"
+    )
+
+
+def _check_azure_status(
+    region: str | None,
+    checked_at: str
+) -> CloudProviderStatus:
+    """
+    Azure has no unauthenticated public JSON feed (Friction Log #1).
+    Returns UNKNOWN with a note explaining the authentication requirement.
+    Production path: Azure Resource Health API with managed identity.
+    """
+    return CloudProviderStatus(
+        provider="azure",
+        region=region,
+        az=None,
+        status="UNKNOWN",
+        affected_services=[],
+        incident_url="https://azure.status.microsoft",
+        checked_at=checked_at,
+        note=(
+            "Azure status requires authentication via the Resource Health API. "
+            "Unauthenticated public JSON feed is not available. "
+            "Check https://azure.status.microsoft manually. "
+            "Production path: Azure Resource Health API with managed identity."
+        )
+    )
+
+
+def _parse_aws_status(
+    data: dict,
+    region: str | None,
+    checked_at: str,
+    used_services: list[str],
+    filter_note: str | None
+) -> CloudProviderStatus:
+    """
+    Parse AWS status feed JSON.
+    Filters by used_services and region if provided.
+    Returns OPERATIONAL if no active incidents match.
+    """
+    affected_services: list[str] = []
+    incident_url: str | None = None
+    status = "OPERATIONAL"
+    raw_affected: list[str] = []
+
+    archive = data.get("archive", [])
+
+    for entry in archive:
+        service_name = entry.get("service_name", "")
+        summary = entry.get("summary", "").lower()
+        entry_region = entry.get("region", "")
+
+        # filter by region if tag present
+        if region and entry_region and region not in entry_region:
+            continue
+
+        # only active incidents (no end time)
+        if entry.get("end"):
+            continue
+
+        raw_affected.append(service_name)
+        if not incident_url:
+            incident_url = entry.get("url")
+        status = "OUTAGE" if "disruption" in summary else "DEGRADED"
+
+    # filter by used services if known
+    if used_services and raw_affected:
+        affected_services = [
+            s for s in raw_affected
+            if any(svc.lower() in s.lower() for svc in used_services)
+        ]
+        # if filtering produces no matches, return all with note
+        if not affected_services:
+            affected_services = raw_affected
+            filter_note = (
+                f"service filter {used_services} produced no matches "
+                f"in feed — returning all affected services"
+            )
+    else:
+        affected_services = raw_affected
+
+    return CloudProviderStatus(
+        provider="aws",
+        region=region,
+        az=None,
+        status=status if affected_services else "OPERATIONAL",
+        affected_services=affected_services,
+        incident_url=incident_url,
+        checked_at=checked_at,
+        note=filter_note
+    )
+
+
+def _parse_gcp_status(
+    data: list,
+    region: str | None,
+    checked_at: str,
+    used_services: list[str],
+    filter_note: str | None
+) -> CloudProviderStatus:
+    """
+    Parse GCP status feed JSON.
+    Uses product IDs (not display names) per GCP documentation.
+    Filters by used_services and region if provided.
+    Only reads stable fields per GCP feed documentation.
+    """
+    affected_services: list[str] = []
+    incident_url: str | None = None
+    status = "OPERATIONAL"
+    raw_affected: list[str] = []
+
+    for incident in data:
+        # only active incidents (no end time)
+        if incident.get("end"):
+            continue
+
+        affected_products = incident.get("affected_products", [])
+        for product in affected_products:
+            product_id = product.get("id", "")
+            product_title = product.get("title", "")
+
+            if region:
+                updates = incident.get("updates", [])
+                region_mentioned = any(
+                    region in update.get("text", "")
+                    for update in updates
+                )
+                if not region_mentioned:
+                    continue
+
+            raw_affected.append(product_id or product_title)
+            if not incident_url:
+                incident_url = incident.get("uri")
+
+            severity = incident.get("severity", "").lower()
+            status = "OUTAGE" if severity == "high" else "DEGRADED"
+
+    # filter by used services if known
+    if used_services and raw_affected:
+        affected_services = [
+            s for s in raw_affected
+            if any(svc.lower() in s.lower() for svc in used_services)
+        ]
+        if not affected_services:
+            affected_services = raw_affected
+            filter_note = (
+                f"service filter {used_services} produced no matches "
+                f"in feed — returning all affected services"
+            )
+    else:
+        affected_services = raw_affected
+
+    return CloudProviderStatus(
+        provider="gcp",
+        region=region,
+        az=None,
+        status=status if affected_services else "OPERATIONAL",
+        affected_services=affected_services,
+        incident_url=incident_url,
+        checked_at=checked_at,
+        note=filter_note
+    )
+
+
+def _fetch_provider_status(
+    provider: str,
+    region: str | None,
+    checked_at: str,
+    used_services: list[str],
+    filter_note: str | None
+) -> CloudProviderStatus:
+    """
+    Fetch and parse the provider status feed for AWS or GCP.
+    Returns UNKNOWN on any network error or parse failure.
+    Enforces 5 second timeout per request.
+    """
+    feed_url = CLOUD_STATUS_FEEDS[provider]
+
+    try:
+        response = httpx.get(feed_url, timeout=5.0)
+        response.raise_for_status()
+        data = response.json()
+
+        if provider == "aws":
+            return _parse_aws_status(
+                data, region, checked_at, used_services, filter_note
+            )
+        elif provider == "gcp":
+            return _parse_gcp_status(
+                data, region, checked_at, used_services, filter_note
+            )
+
+    except httpx.TimeoutException:
+        return CloudProviderStatus(
+            provider=provider,
+            region=region,
+            az=None,
+            status="UNKNOWN",
+            affected_services=[],
+            incident_url=None,
+            checked_at=checked_at,
+            note="status feed request timed out after 5 seconds"
+        )
+    except Exception as e:
+        return CloudProviderStatus(
+            provider=provider,
+            region=region,
+            az=None,
+            status="UNKNOWN",
+            affected_services=[],
+            incident_url=None,
+            checked_at=checked_at,
+            note=f"status feed fetch failed: {type(e).__name__}"
+        )
+
+
 def check_cloud_status(state: IncidentState) -> dict[str, Any]:
     """
     Conditional deterministic node. Only invoked when a cloud:* tag
     is present in unified_tags. Fetches the provider status feed for
     each cloud tag value and writes CloudProviderStatus objects to state.
 
-    Supports: aws, gcp
-    Azure: returns UNKNOWN with note (see Friction Log #1)
+    Service dependency filtering (ADR-009):
+      Priority 1: metric name prefix inference
+      Priority 2: {provider}-service: tags
+      Priority 3: return all affected services with note
 
-    Timeout: 5 seconds per provider request. Failure returns UNKNOWN,
-    never raises an exception that halts the graph.
+    Supports: aws, gcp
+    Azure: returns UNKNOWN with note (Friction Log #1)
+    Timeout: 5 seconds per provider. Failure returns UNKNOWN.
 
     Writes to state:
       cloud_provider_statuses   list[CloudProviderStatus]
-                                empty list if no cloud tag present
-
-    TODO: implement AWS status feed parser
-    TODO: implement GCP status feed parser
-    TODO: implement Azure UNKNOWN fallback with note
-    TODO: implement region filtering from unified_tags
-    TODO: enforce 5 second timeout per provider
     """
-    pass
+    unified_tags = state.get("unified_tags", {})
+    cloud_tags = unified_tags.get("cloud", [])
+    region_tags = unified_tags.get("region", [])
+    firing_monitors = state.get("firing_monitors", [])
 
+    if not cloud_tags:
+        return {"cloud_provider_statuses": []}
+
+    statuses: list[CloudProviderStatus] = []
+    region = region_tags[0] if region_tags else None
+    checked_at = datetime.now(timezone.utc).isoformat()
+
+    for provider in cloud_tags:
+        provider = provider.lower().strip()
+
+        if provider == "azure":
+            statuses.append(_check_azure_status(region, checked_at))
+            continue
+
+        if provider not in CLOUD_STATUS_FEEDS:
+            statuses.append(CloudProviderStatus(
+                provider=provider,
+                region=region,
+                az=None,
+                status="UNKNOWN",
+                affected_services=[],
+                incident_url=None,
+                checked_at=checked_at,
+                note=f"unsupported provider '{provider}' — no status feed configured"
+            ))
+            continue
+
+        used_services, filter_note = _extract_cloud_services(
+            provider, unified_tags, firing_monitors
+        )
+
+        statuses.append(
+            _fetch_provider_status(
+                provider, region, checked_at, used_services, filter_note
+            )
+        )
+
+    return {"cloud_provider_statuses": statuses}
 
 # ---------------------------------------------------------------------------
 # LLM NODES
