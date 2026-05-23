@@ -115,3 +115,20 @@ see state.py RemediationStep docstring and Friction Log #4).
 Claude reads all of the above — including stale or inconsistent values —
 and uses judgment to infer the most likely current owner and downstream
 consumers. This is an explicit design decision documented in Friction Log #4.
+
+## Cloud Service Dependency Tags
+
+The following tag keys are used by check_cloud_status for service
+dependency filtering (ADR-009). They are optional — metric prefix
+inference is attempted first.
+
+  aws-service     explicit AWS service dependency
+                  e.g. aws-service:rds, aws-service:s3,
+                       aws-service:elasticache
+                  used when metric names do not encode the AWS service
+                  (custom metrics, generic system metrics)
+
+  gcp-service     explicit GCP service dependency
+                  e.g. gcp-service:cloudsql, gcp-service:storage,
+                       gcp-service:pubsub
+                  used when metric names do not encode the GCP service
