@@ -330,20 +330,55 @@ def assess_slo_impact(state: IncidentState) -> dict[str, Any]:
                                   * (window_seconds / 60)
                                   None if budget already exhausted
       urgency_score               HIGH / MEDIUM / LOW
-                                  HIGH:   burn_rate >= 5x
-                                  MEDIUM: burn_rate >= 2x and < 5x
-                                  LOW:    burn_rate < 2x
       budget_state                HEALTHY / DEGRADED / EXHAUSTED / DEBT
-                                  HEALTHY:   remaining > 50%
-                                  DEGRADED:  remaining > 0% and <= 50%
-                                  EXHAUSTED: remaining = 0%
-                                  DEBT:      remaining < 0%
-
-    TODO: implement time_to_exhaustion calculation
-    TODO: implement urgency_score rule logic
-    TODO: implement budget_state rule logic
     """
-    pass
+    slo = state["raw_slo"]
+    burn_rate: float = slo["burn_rate"]
+    budget_remaining: float = slo["error_budget_remaining_pct"]
+    window_seconds: int = slo.get("window_seconds", 3600)
+    window_minutes: float = window_seconds / 60
+
+    # ------------------------------------------------------------------
+    # budget_state — classify current error budget health
+    # ------------------------------------------------------------------
+    if budget_remaining > 50.0:
+        budget_state = "HEALTHY"
+    elif budget_remaining > 0.0:
+        budget_state = "DEGRADED"
+    elif budget_remaining == 0.0:
+        budget_state = "EXHAUSTED"
+    else:
+        budget_state = "DEBT"
+
+    # ------------------------------------------------------------------
+    # time_to_exhaustion_minutes — how long until budget reaches zero
+    # None if already exhausted or in debt
+    # ------------------------------------------------------------------
+    if budget_remaining <= 0.0:
+        time_to_exhaustion: float | None = None
+    elif burn_rate <= 0.0:
+        # burn rate of zero means no consumption — budget never exhausts
+        time_to_exhaustion = None
+    else:
+        time_to_exhaustion = round(
+            (budget_remaining / (burn_rate * 100)) * window_minutes, 2
+        )
+
+    # ------------------------------------------------------------------
+    # urgency_score — rule-based classification from burn rate
+    # ------------------------------------------------------------------
+    if burn_rate >= 5.0:
+        urgency_score = "HIGH"
+    elif burn_rate >= 2.0:
+        urgency_score = "MEDIUM"
+    else:
+        urgency_score = "LOW"
+
+    return {
+        "time_to_exhaustion_minutes": time_to_exhaustion,
+        "urgency_score": urgency_score,
+        "budget_state": budget_state,
+    }
 
 
 def check_cloud_status(state: IncidentState) -> dict[str, Any]:
