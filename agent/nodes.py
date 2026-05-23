@@ -122,6 +122,103 @@ CLOUD_STATUS_FEEDS: dict[str, str] = {
     "azure": None,
 }
 
+# ---------------------------------------------------------------------------
+# Private helpers — used by ingest_incident
+# ---------------------------------------------------------------------------
+
+def _normalize_monitor(raw: dict) -> tuple[dict, bool, list[str]]:
+    """
+    Apply translation tables to a single monitor dict.
+    Returns (normalized_monitor, has_unknown, warnings).
+
+    Translates status, type, and signal values to canonical
+    internal schema values per ADR-010.
+    """
+    warnings: list[str] = []
+    has_unknown = False
+    normalized = dict(raw)
+    metric = raw.get("metric", "unknown")
+
+    # status
+    raw_status = str(raw.get("status", "")).lower().strip()
+    if raw_status in STATUS_TRANSLATION:
+        normalized["status"] = STATUS_TRANSLATION[raw_status]
+    else:
+        warnings.append(
+            f"unknown status value '{raw_status}' on metric "
+            f"'{metric}' — flagged for normalization"
+        )
+        has_unknown = True
+
+    # type
+    raw_type = str(raw.get("type", "")).lower().strip()
+    if raw_type in TYPE_TRANSLATION:
+        normalized["type"] = TYPE_TRANSLATION[raw_type]
+    else:
+        warnings.append(
+            f"unknown type value '{raw_type}' on metric "
+            f"'{metric}' — flagged for normalization"
+        )
+        has_unknown = True
+
+    # signal
+    raw_signal = str(raw.get("signal", "")).lower().strip()
+    if raw_signal in SIGNAL_TRANSLATION:
+        normalized["signal"] = SIGNAL_TRANSLATION[raw_signal]
+    else:
+        warnings.append(
+            f"unknown signal value '{raw_signal}' on metric "
+            f"'{metric}' — flagged for normalization"
+        )
+        has_unknown = True
+
+    return normalized, has_unknown, warnings
+
+
+def _normalize_window(raw_window: str, warnings: list[str]) -> tuple[int, bool]:
+    """
+    Translate a window string to canonical window_seconds int.
+    Returns (window_seconds, has_unknown).
+
+    Falls back to 3600 (1h) if value is unrecognized and
+    appends a warning.
+    """
+    normalized = str(raw_window).lower().strip()
+    if normalized in WINDOW_TRANSLATION:
+        return WINDOW_TRANSLATION[normalized], False
+
+    try:
+        return int(normalized), False
+    except ValueError:
+        warnings.append(
+            f"unknown window value '{raw_window}' — defaulting to 3600"
+        )
+        return 3600, True
+
+
+def _merge_tags(tags: list[str], unified: dict[str, list[str]], warnings: list[str]) -> None:
+    """
+    Merge a flat tag list into a unified dict[str, list[str]].
+
+    Tag format: "key:value" (e.g. "team:payments")
+    Malformed tags without a colon separator are logged and skipped.
+    Duplicate values within the same key are deduplicated.
+    Keys are lowercased. Values preserve original casing.
+    """
+    for tag in tags:
+        if ":" not in tag:
+            warnings.append(
+                f"malformed tag '{tag}' has no colon separator — skipped"
+            )
+            continue
+        key, value = tag.split(":", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if key not in unified:
+            unified[key] = []
+        if value not in unified[key]:
+            unified[key].append(value)
+
 
 # ---------------------------------------------------------------------------
 # DETERMINISTIC NODES
@@ -151,12 +248,54 @@ def ingest_incident(state: IncidentState) -> dict[str, Any]:
       quiet monitors into unified dict[str, list[str]].
       Duplicate values within the same key are deduplicated.
       Malformed tags (no colon separator) are logged and skipped.
-
-    TODO: implement translation table application
-    TODO: implement tag unification logic
-    TODO: implement unknown value detection and flagging
     """
-    pass
+    warnings: list[str] = []
+    has_unknown = False
+
+    # Step 1 — normalize window in SLO payload
+    raw_slo = dict(state["raw_slo"])
+    window_seconds, window_unknown = _normalize_window(
+        raw_slo.get("window", ""), warnings
+    )
+    raw_slo["window_seconds"] = window_seconds
+    if window_unknown:
+        has_unknown = True
+
+    # Step 2 — normalize firing monitors
+    normalized_firing: list[dict] = []
+    for monitor in state.get("firing_monitors", []):
+        norm, unknown, mon_warnings = _normalize_monitor(monitor)
+        normalized_firing.append(norm)
+        warnings.extend(mon_warnings)
+        if unknown:
+            has_unknown = True
+
+    # Step 3 — normalize quiet monitors
+    normalized_quiet: list[dict] = []
+    for monitor in state.get("quiet_monitors", []):
+        norm, unknown, mon_warnings = _normalize_monitor(monitor)
+        normalized_quiet.append(norm)
+        warnings.extend(mon_warnings)
+        if unknown:
+            has_unknown = True
+
+    # Step 4 — unify tags from all sources (ADR-007)
+    unified: dict[str, list[str]] = {}
+    _merge_tags(raw_slo.get("tags", []), unified, warnings)
+    for monitor in normalized_firing:
+        _merge_tags(monitor.get("tags", []), unified, warnings)
+    for monitor in normalized_quiet:
+        _merge_tags(monitor.get("tags", []), unified, warnings)
+
+    # Step 5 — return state updates
+    return {
+        "raw_slo": raw_slo,
+        "firing_monitors": normalized_firing,
+        "quiet_monitors": normalized_quiet,
+        "unified_tags": unified,
+        "has_unknown_values": has_unknown,
+        "normalization_warnings": warnings,
+    }
 
 
 def normalize_incident(state: IncidentState) -> dict[str, Any]:
