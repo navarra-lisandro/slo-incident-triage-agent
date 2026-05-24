@@ -148,3 +148,44 @@ Sparse or stale tags produce weaker ownership recommendations.
 include a pattern for LLM-assisted metadata inference from unstructured
 or inconsistent tag sets — this is a common enterprise reliability
 engineering problem with no deterministic solution.
+
+---
+
+## Friction #5 — POST /triage payload requires pre-assembly that monitoring webhooks do not provide natively
+
+**Discovery:** During api.py design review.
+
+**Problem:** The /triage endpoint expects a fully assembled incident
+payload including the SLO state, all firing monitors, and all quiet
+monitors in a single request. A raw Datadog SLO webhook fires when
+the burn rate is breached but provides only the SLO alert context —
+it does not include constituent monitor states.
+
+Assembling the full payload requires:
+  1. Receiving the SLO burn rate alert from Datadog
+  2. Querying the Datadog API for constituent monitor states
+  3. Identifying which monitors are firing vs. healthy
+  4. Bundling SLO + firing monitors + quiet monitors into the schema
+  5. POSTing the assembled payload to /triage
+
+This assembly step is not provided by any monitoring webhook natively.
+A developer integrating this agent with a real monitoring system will
+hit this gap immediately.
+
+**v1 approach:** Pre-assembled synthetic fixture files in
+data/incidents/ simulate the assembled payload. No enrichment
+service is needed for development and evaluation.
+
+**Production path:** A webhook enrichment service sits between
+the monitoring system and /triage:
+  Datadog SLO alert -> enrichment service -> assembled payload -> /triage
+
+The enrichment service queries the Datadog API (or equivalent) for
+monitor states and assembles the full incident payload before
+forwarding to the agent.
+
+**Suggested improvement:** LangChain documentation for incident
+management agent patterns should explicitly document the enrichment
+layer requirement. The gap between "raw monitoring webhook" and
+"fully assembled incident context" is non-obvious and represents
+significant integration work for production deployments.
