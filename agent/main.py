@@ -162,7 +162,7 @@ def main() -> None:
     print(f"[OK] Building initial state for service: {fixture.get('service')}")
     initial_state = build_initial_state(fixture)
 
-    print(f"[OK] Invoking agent graph...")
+    print("[OK] Invoking agent graph...")
     started_at = datetime.now(timezone.utc)
 
     try:
