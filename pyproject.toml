@@ -30,3 +30,16 @@ dev = [
     "ipykernel (>=7.2.0,<8.0.0)",
     "pytest-cov (>=7.1.0,<8.0.0)"
 ]
+
+[tool.coverage.run]
+omit = [
+    "agent/api.py",
+    "agent/graph.py",
+    "agent/main.py",
+    "agent/nodes/llm.py",
+    "agent/nodes/deterministic.py",
+    "agent/tools.py",
+]
+
+[tool.coverage.report]
+fail_under = 100
