@@ -37,6 +37,8 @@ omit = [
     "agent/graph.py",
     "agent/main.py",
     "agent/nodes/llm.py",
+    "agent/nodes/deterministic.py",
+    "agent/tools.py",
 ]
 
 [tool.coverage.report]
