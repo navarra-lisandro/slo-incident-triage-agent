@@ -4,7 +4,7 @@ install:
 	poetry install
 
 run:
-	poetry run python agent/main.py
+	poetry run python agent/main.py --incident data/incidents/p1_payments.json
 
 serve:
 	poetry run uvicorn agent.api:app --reload --port 8000
