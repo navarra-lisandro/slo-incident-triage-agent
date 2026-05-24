@@ -55,8 +55,6 @@ from agent.state import (
 from agent.tools import read_runbook  # noqa: F401
 
 
-
-
 # ---------------------------------------------------------------------------
 # LLM client — shared across all LLM nodes
 # ---------------------------------------------------------------------------
@@ -427,6 +425,133 @@ def _normalize_monitors(
         resolved.append(normalized)
 
     return resolved, warnings
+
+
+# ---------------------------------------------------------------------------
+# Pydantic output schema — used by triage_firing_signals
+# with_structured_output pattern:
+#   Reference: https://python.langchain.com/docs/how-to/structured_output/
+# SystemMessage + HumanMessage pattern:
+#   Reference: https://reference.langchain.com/python/integrations/
+#              langchain_anthropic/ChatAnthropic/
+# ---------------------------------------------------------------------------
+
+class SignalAssessmentOutput(BaseModel):
+    """
+    Claude's assessment of a single firing signal.
+    Mirrors SignalAssessment TypedDict in state.py.
+    Pydantic used here for runtime validation of Claude's response.
+
+    role taxonomy (ADR-011):
+      PRIMARY       signal is the primary driver of SLO burn
+      CONTRIBUTING  signal is independently degraded, adding to burn
+      UPSTREAM      signal is causing another signal to degrade
+      DOWNSTREAM    signal is a symptom of another signal
+    """
+    signal: str = Field(
+        description="Signal type: latency, errors, saturation, traffic, synthetic_check"
+    )
+    role: str = Field(
+        description="Role: PRIMARY, CONTRIBUTING, UPSTREAM, or DOWNSTREAM"
+    )
+    current_value: float = Field(
+        description="Current metric value at time of alert"
+    )
+    threshold: float = Field(
+        description="Configured threshold for this signal"
+    )
+    deviation_factor: float = Field(
+        description="current_value divided by threshold"
+    )
+    observation: str = Field(
+        description="One sentence assessment of this signal's behavior"
+    )
+
+
+class SignalCorrelationOutput(BaseModel):
+    """
+    Claude's full correlation analysis of all firing signals.
+    Mirrors SignalCorrelation TypedDict in state.py.
+    Option C design — structured per-signal data + narrative explanation.
+    """
+    signal_assessments: list[SignalAssessmentOutput] = Field(
+        description="Per-signal structured assessment for each firing monitor"
+    )
+    failure_pattern: str = Field(
+        description=(
+            "The identified cross-signal failure pattern. "
+            "Examples: 'resource exhaustion', 'upstream dependency failure', "
+            "'cascading latency degradation', 'synthetic flap — SLO healthy'"
+        )
+    )
+    correlation_narrative: str = Field(
+        description=(
+            "2-3 sentence prose explanation of how the signals relate "
+            "to each other and why the SLO is burning"
+        )
+    )
+
+def _build_triage_context(state: IncidentState) -> str:
+    """
+    Assemble the incident context string for the triage_firing_signals prompt.
+    Includes SLO state, derived metrics, firing monitors, quiet monitors,
+    and cloud provider status if available.
+    """
+    slo = state["raw_slo"]
+    lines = [
+        f"SERVICE: {state['service']}",
+        f"INCIDENT ID: {state['incident_id']}",
+        f"TRIGGERED AT: {state['triggered_at']}",
+        "",
+        "SLO STATE:",
+        f"  name: {slo['name']}",
+        f"  target: {slo['target_pct']}%",
+        f"  burn rate: {slo['burn_rate']}x",
+        f"  error budget remaining: {slo['error_budget_remaining_pct']}%",
+        f"  window: {slo.get('window_seconds', 3600)} seconds",
+        "",
+        "DERIVED METRICS:",
+        f"  budget_state: {state.get('budget_state', 'unknown')}",
+        f"  urgency_score: {state.get('urgency_score', 'unknown')}",
+        f"  time_to_exhaustion_minutes: {state.get('time_to_exhaustion_minutes', 'N/A')}",
+        "",
+        "FIRING MONITORS (hot signals):",
+    ]
+
+    for m in state.get("firing_monitors", []):
+        lines.append(
+            f"  [{m['signal'].upper()}] {m['metric']} = {m.get('current_value')} "
+            f"(threshold: {m.get('threshold')}) status: {m['status']}"
+        )
+
+    lines.append("")
+    lines.append("QUIET MONITORS (healthy signals — context only):")
+    for m in state.get("quiet_monitors", []):
+        lines.append(f"  [{m['signal'].upper()}] {m['metric']} status: {m['status']}")
+
+    cloud_statuses = state.get("cloud_provider_statuses", [])
+    if cloud_statuses:
+        lines.append("")
+        lines.append("CLOUD PROVIDER STATUS:")
+        for cs in cloud_statuses:
+            lines.append(
+                f"  {cs['provider'].upper()} "
+                f"({cs.get('region', 'global')}): {cs['status']}"
+            )
+            if cs.get("affected_services"):
+                lines.append(f"    affected: {', '.join(cs['affected_services'])}")
+            if cs.get("note"):
+                lines.append(f"    note: {cs['note']}")
+
+    tags = state.get("unified_tags", {})
+    if tags:
+        lines.append("")
+        lines.append("UNIFIED TAGS:")
+        for key, values in tags.items():
+            lines.append(f"  {key}: {', '.join(values)}")
+
+    return "\n".join(lines)
+
 
 
 # ---------------------------------------------------------------------------
@@ -909,9 +1034,9 @@ def triage_firing_signals(state: IncidentState) -> dict[str, Any]:
     First Claude reasoning node. Receives the full normalized state
     including derived metrics and cloud provider status.
 
-    Produces a per-signal structured assessment (SignalAssessment),
-    identifies the cross-signal failure pattern, and writes a
-    correlation narrative. Option C design: structured data + narrative.
+    Produces a per-signal structured assessment (SignalAssessmentOutput),
+    identifies the cross-signal failure pattern, and writes a correlation
+    narrative. Option C design: structured data + narrative.
 
     Signal role taxonomy (ADR-011):
       PRIMARY       signal is the primary driver of SLO burn
@@ -919,18 +1044,73 @@ def triage_firing_signals(state: IncidentState) -> dict[str, Any]:
       UPSTREAM      signal is causing another signal to degrade
       DOWNSTREAM    signal is a symptom of another signal
 
+    Uses with_structured_output with SignalCorrelationOutput Pydantic model.
+    Reference: https://python.langchain.com/docs/how-to/structured_output/
+
+    SystemMessage + HumanMessage pattern for ChatAnthropic:
+    Reference: https://reference.langchain.com/python/integrations/
+               langchain_anthropic/ChatAnthropic/
+
     Writes to state:
-      signal_correlation    SignalCorrelation
-        signal_assessments  list[SignalAssessment]
-        failure_pattern     str
-        correlation_narrative str
-
-    TODO: implement system prompt
-    TODO: implement state context assembly for prompt
-    TODO: implement structured output parsing
+      signal_correlation    SignalCorrelation (as dict for TypedDict state)
     """
-    pass
+    structured_llm = llm.with_structured_output(SignalCorrelationOutput)
 
+    system_prompt = """You are a senior SRE performing incident triage.
+Your job is to analyze the firing signals contributing to an SLO burn rate
+alert and produce a structured correlation analysis.
+
+For each firing monitor, assess:
+  - Its role in the incident (PRIMARY, CONTRIBUTING, UPSTREAM, DOWNSTREAM)
+  - How far it has deviated from its threshold
+  - A one-sentence observation about its behavior
+
+Then identify the cross-signal failure pattern and write a 2-3 sentence
+narrative explaining how the signals relate to each other and why the
+SLO is burning.
+
+Key reasoning principles:
+  - UPSTREAM signals cause other signals to degrade
+    (e.g. saturation causing latency)
+  - DOWNSTREAM signals are symptoms of upstream causes
+    (e.g. latency caused by saturation)
+  - Quiet monitors are context — knowing what is NOT broken
+    is half the diagnostic picture
+  - Cloud provider degradation informs but does not determine root cause
+  - The SLO budget_state and urgency_score provide the severity context
+
+Be precise and concise. Your output feeds directly into severity
+classification and remediation planning."""
+
+    context = _build_triage_context(state)
+    human_message = (
+        f"Analyze the following incident and produce a signal correlation:\n\n"
+        f"{context}"
+    )
+
+    result: SignalCorrelationOutput = structured_llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=human_message),
+    ])
+
+    # map Pydantic output to TypedDict state schema
+    signal_correlation = {
+        "signal_assessments": [
+            {
+                "signal": a.signal,
+                "role": a.role,
+                "current_value": a.current_value,
+                "threshold": a.threshold,
+                "deviation_factor": a.deviation_factor,
+                "observation": a.observation,
+            }
+            for a in result.signal_assessments
+        ],
+        "failure_pattern": result.failure_pattern,
+        "correlation_narrative": result.correlation_narrative,
+    }
+
+    return {"signal_correlation": signal_correlation}
 
 def classify_severity(state: IncidentState) -> dict[str, Any]:
     """
