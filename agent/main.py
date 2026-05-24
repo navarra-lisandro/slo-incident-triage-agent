@@ -100,7 +100,7 @@ def print_summary(result: dict[str, Any]) -> None:
         sys.exit(1)
 
     print("\n" + "=" * 60)
-    print(f"INCIDENT TRIAGE SUMMARY")
+    print("INCIDENT TRIAGE SUMMARY")
     print("=" * 60)
     print(f"Title:       {summary['title']}")
     print(f"Severity:    {summary['severity']}")
@@ -112,23 +112,23 @@ def print_summary(result: dict[str, Any]) -> None:
     if summary.get("cloud_provider_impact"):
         print(f"Cloud:       {summary['cloud_provider_impact']}")
     print()
-    print(f"Justification:")
+    print("Justification:")
     print(f"  {summary['severity_justification']}")
     print()
-    print(f"Narrative:")
+    print("Narrative:")
     print(f"  {summary['summary_narrative']}")
     print()
     print(f"Responsible teams: {', '.join(summary['responsible_teams'])}")
     print(f"Downstream impact: {', '.join(summary['downstream_impact'])}")
     print()
-    print(f"Recommended steps:")
+    print("Recommended steps:")
     for i, step in enumerate(summary["recommended_steps"], 1):
         print(f"  {i}. {step}")
     if summary.get("includes_failover"):
         print("  [includes failover options]")
     if summary.get("normalization_warnings"):
         print()
-        print(f"Normalization warnings:")
+        print("Normalization warnings:")
         for w in summary["normalization_warnings"]:
             print(f"  [WARN] {w}")
     print()
