@@ -37,6 +37,7 @@ import json  # noqa: F401
 import httpx  # noqa: F401
 from datetime import datetime, timezone  # noqa: F401
 from typing import Any
+from pydantic import BaseModel, Field
 
 from langchain_anthropic import ChatAnthropic  # noqa: F401
 from langchain_core.messages import HumanMessage, SystemMessage  # noqa: F401
@@ -52,6 +53,8 @@ from agent.state import (
     IncidentSummary,  # noqa: F401
 )
 from agent.tools import read_runbook  # noqa: F401
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -298,27 +301,174 @@ def ingest_incident(state: IncidentState) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Pydantic output schema — used by normalize_incident
+# with_structured_output requires Pydantic BaseModel for runtime validation
+# Reference: https://python.langchain.com/docs/how-to/structured_output/
+# ---------------------------------------------------------------------------
+
+class NormalizedField(BaseModel):
+    """
+    Claude's resolution of a single unknown monitor field value.
+    Used by normalize_incident via with_structured_output.
+
+    confidence values: HIGH, MEDIUM, LOW
+    canonical_value:   must be one of the valid values for the field type
+                       or "unknown" if Claude cannot confidently resolve
+    """
+    canonical_value: str = Field(
+        description=(
+            "The canonical internal value this field should map to. "
+            "Must be one of the valid values for this field type."
+        )
+    )
+    confidence: str = Field(
+        description="Confidence in the normalization: HIGH, MEDIUM, or LOW"
+    )
+    reasoning: str = Field(
+        description="One sentence explaining the normalization decision"
+    )
+
+
+# valid canonical values per field type (ADR-010)
+# used by normalize_incident to skip already-canonical values
+# and to provide valid options to Claude in the normalization prompt
+_NORMALIZE_VALID_VALUES: dict[str, list[str]] = {
+    "status":  ["firing", "healthy"],
+    "type":    ["performance", "synthetic"],
+    "signal":  [
+        "latency", "errors", "saturation",
+        "traffic", "synthetic_check"
+    ],
+}
+
+
+def _resolve_unknown_field(
+    field_name: str,
+    raw_value: str,
+    metric: str,
+    monitor_context: dict,
+    structured_llm: Any
+) -> tuple[str, str | None]:
+    """
+    Ask Claude to resolve a single unknown field value to a canonical value.
+    Returns (canonical_value, warning_or_None).
+
+    LOW confidence or "unknown" result appends a warning to state.
+    Exception falls back to raw value with a warning — never halts the graph.
+    """
+    valid_options = _NORMALIZE_VALID_VALUES.get(field_name, [])
+
+    prompt = (
+        f"You are normalizing a monitoring alert payload to a canonical schema.\n\n"
+        f"Field: {field_name}\n"
+        f"Raw value from provider: '{raw_value}'\n"
+        f"Monitor metric: '{metric}'\n"
+        f"Valid canonical values: {valid_options}\n\n"
+        f"Additional monitor context:\n"
+        f"  type: {monitor_context.get('type', 'unknown')}\n"
+        f"  signal: {monitor_context.get('signal', 'unknown')}\n"
+        f"  status: {monitor_context.get('status', 'unknown')}\n\n"
+        f"Map the raw value to the most appropriate canonical value. "
+        f"If you cannot confidently map it, use 'unknown'."
+    )
+
+    try:
+        result: NormalizedField = structured_llm.invoke(prompt)
+
+        if result.confidence == "LOW" or result.canonical_value == "unknown":
+            return result.canonical_value, (
+                f"low confidence normalization on metric '{metric}' "
+                f"field '{field_name}': '{raw_value}' -> "
+                f"'{result.canonical_value}' ({result.reasoning})"
+            )
+
+        return result.canonical_value, None
+
+    except Exception as e:
+        return raw_value, (
+            f"normalization failed on metric '{metric}' "
+            f"field '{field_name}': '{raw_value}' — "
+            f"{type(e).__name__}: keeping raw value"
+        )
+
+
+def _normalize_monitors(
+    monitors: list[dict],
+    structured_llm: Any
+) -> tuple[list[dict], list[str]]:
+    """
+    Resolve unknown field values in a list of monitors using Claude.
+    Skips fields already at canonical values — only resolves unknowns.
+    Returns (normalized_monitors, warnings).
+    """
+    resolved: list[dict] = []
+    warnings: list[str] = []
+
+    for monitor in monitors:
+        normalized = dict(monitor)
+        metric = monitor.get("metric", "unknown")
+
+        for field_name in ["status", "type", "signal"]:
+            raw_value = str(monitor.get(field_name, "")).lower().strip()
+            valid_options = _NORMALIZE_VALID_VALUES.get(field_name, [])
+
+            # skip if already a canonical value
+            if raw_value in valid_options:
+                continue
+
+            canonical, warning = _resolve_unknown_field(
+                field_name, raw_value, metric, monitor, structured_llm
+            )
+            normalized[field_name] = canonical
+            if warning:
+                warnings.append(warning)
+
+        resolved.append(normalized)
+
+    return resolved, warnings
+
+
+# ---------------------------------------------------------------------------
+# LLM NODES
+# ---------------------------------------------------------------------------
+
 def normalize_incident(state: IncidentState) -> dict[str, Any]:
     """
     Conditional LLM node. Only invoked when ingest_incident sets
     has_unknown_values = True.
 
-    Resolves unknown field values to canonical schema values using
-    Claude. Only processes fields flagged as unknown -- known values
-    from the translation table are never re-processed.
+    Resolves unknown field values to canonical schema values using Claude.
+    Only processes fields not already resolved by the translation table —
+    known values from ingest_incident are never re-processed.
+
+    Uses with_structured_output for reliable structured responses.
+    Reference: https://python.langchain.com/docs/how-to/structured_output/
+
+    Pydantic BaseModel used for output schema (not TypedDict) to get
+    runtime field validation on Claude's response. See NormalizedField.
+    Reference: https://api.python.langchain.com/en/latest/chat_models/
+               langchain_anthropic.chat_models.ChatAnthropicMessages.html
 
     Writes to state:
       firing_monitors         unknown values resolved
       quiet_monitors          unknown values resolved
-      normalization_warnings  updated with any values Claude
-                              could not confidently resolve
-
-    TODO: implement LLM normalization prompt
-    TODO: implement unknown value resolution logic
-    TODO: handle Claude uncertainty (set to "unknown", add warning)
+      normalization_warnings  appended via operator.add reducer
     """
-    pass
+    structured_llm = llm.with_structured_output(NormalizedField)
 
+    resolved_firing, firing_warnings = _normalize_monitors(
+        state.get("firing_monitors", []), structured_llm
+    )
+    resolved_quiet, quiet_warnings = _normalize_monitors(
+        state.get("quiet_monitors", []), structured_llm
+    )
+
+    return {
+        "firing_monitors": resolved_firing,
+        "quiet_monitors": resolved_quiet,
+        "normalization_warnings": firing_warnings + quiet_warnings,
+    }
 
 def assess_slo_impact(state: IncidentState) -> dict[str, Any]:
     """
