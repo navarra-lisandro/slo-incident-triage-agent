@@ -3,9 +3,10 @@
 install:
 	poetry install
 
+INCIDENT ?= data/incidents/p1_payments_resource_exhaustion.json
 run:
-	poetry run python agent/main.py --incident data/incidents/p1_payments.json
-
+	poetry run python -m agent.main --incident $(INCIDENT)
+	
 serve:
 	poetry run uvicorn agent.api:app --reload --port 8000
 

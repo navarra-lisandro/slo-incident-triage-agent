@@ -1,0 +1,94 @@
+{
+  "incident_id": "INC-2024-005",
+  "triggered_at": "2024-01-19T18:55:00Z",
+  "service": "order-api",
+  "slo": {
+    "name": "order-api availability SLO",
+    "target_pct": 99.9,
+    "burn_rate": 6.0,
+    "error_budget_remaining_pct": 8.3,
+    "window": "1h",
+    "tags": [
+      "service:order-api",
+      "env:prod",
+      "team:orders",
+      "cloud:aws",
+      "region:us-east-1",
+      "downstream:trading-desk",
+      "downstream:risk-management"
+    ]
+  },
+  "firing_monitors": [
+    {
+      "type": "apm",
+      "signal": "errors",
+      "metric": "trace.web.request.errors",
+      "current_value": 4.2,
+      "threshold": 1.0,
+      "status": "triggered",
+      "tags": [
+        "service:order-api",
+        "env:prod",
+        "team:orders",
+        "notify:@orders-oncall@company.com",
+        "pagerduty:orders-escalation",
+        "aws-service:rds",
+        "aws-service:sqs"
+      ]
+    },
+    {
+      "type": "apm",
+      "signal": "latency",
+      "metric": "aws.rds.read_latency",
+      "current_value": 4500.0,
+      "threshold": 800.0,
+      "status": "triggered",
+      "tags": [
+        "service:order-api",
+        "env:prod",
+        "team:orders",
+        "aws-service:rds",
+        "region:us-east-1"
+      ]
+    },
+    {
+      "type": "synthetics",
+      "signal": "synthetic_check",
+      "metric": "synthetics.http.response.time",
+      "current_value": 8900.0,
+      "threshold": 2000.0,
+      "status": "triggered",
+      "tags": [
+        "service:order-api",
+        "env:prod",
+        "team:orders"
+      ]
+    }
+  ],
+  "quiet_monitors": [
+    {
+      "type": "apm",
+      "signal": "saturation",
+      "metric": "system.cpu.utilization",
+      "current_value": 61.0,
+      "threshold": 80.0,
+      "status": "ok",
+      "tags": [
+        "service:order-api",
+        "env:prod"
+      ]
+    },
+    {
+      "type": "apm",
+      "signal": "traffic",
+      "metric": "trace.web.request.hits",
+      "current_value": 780.0,
+      "threshold": 500.0,
+      "status": "ok",
+      "tags": [
+        "service:order-api",
+        "env:prod"
+      ]
+    }
+  ]
+}

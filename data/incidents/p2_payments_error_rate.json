@@ -1,0 +1,85 @@
+{
+  "incident_id": "INC-2024-002",
+  "triggered_at": "2024-01-16T14:22:00Z",
+  "service": "payments-service",
+  "slo": {
+    "name": "payments-service availability SLO",
+    "target_pct": 99.9,
+    "burn_rate": 2.1,
+    "error_budget_remaining_pct": 38.5,
+    "window": "6h",
+    "tags": [
+      "service:payments-service",
+      "env:prod",
+      "team:payments"
+    ]
+  },
+  "firing_monitors": [
+    {
+      "type": "apm",
+      "signal": "errors",
+      "metric": "trace.web.request.errors",
+      "current_value": 1.8,
+      "threshold": 1.0,
+      "status": "triggered",
+      "tags": [
+        "service:payments-service",
+        "env:prod",
+        "team:payments",
+        "notify:@payments-oncall@company.com",
+        "pagerduty:payments-escalation"
+      ]
+    }
+  ],
+  "quiet_monitors": [
+    {
+      "type": "apm",
+      "signal": "latency",
+      "metric": "trace.web.request.duration",
+      "current_value": 420.0,
+      "threshold": 800.0,
+      "status": "ok",
+      "tags": [
+        "service:payments-service",
+        "env:prod"
+      ]
+    },
+    {
+      "type": "apm",
+      "signal": "saturation",
+      "metric": "aws.rds.connections",
+      "current_value": 180.0,
+      "threshold": 400.0,
+      "status": "ok",
+      "tags": [
+        "service:payments-service",
+        "env:prod",
+        "aws-service:rds"
+      ]
+    },
+    {
+      "type": "synthetics",
+      "signal": "synthetic_check",
+      "metric": "synthetics.http.response.time",
+      "current_value": 850.0,
+      "threshold": 2000.0,
+      "status": "ok",
+      "tags": [
+        "service:payments-service",
+        "env:prod"
+      ]
+    },
+    {
+      "type": "apm",
+      "signal": "traffic",
+      "metric": "trace.web.request.hits",
+      "current_value": 1200.0,
+      "threshold": 500.0,
+      "status": "ok",
+      "tags": [
+        "service:payments-service",
+        "env:prod"
+      ]
+    }
+  ]
+}

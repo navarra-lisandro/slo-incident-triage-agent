@@ -1,0 +1,86 @@
+{
+  "incident_id": "INC-2024-004",
+  "triggered_at": "2024-01-18T03:45:00Z",
+  "service": "auth-service",
+  "slo": {
+    "name": "auth-service availability SLO",
+    "target_pct": 99.95,
+    "burn_rate": 0.2,
+    "error_budget_remaining_pct": 91.7,
+    "window": "1h",
+    "tags": [
+      "service:auth-service",
+      "env:prod",
+      "team:platform",
+      "downstream:payments-service",
+      "downstream:order-api"
+    ]
+  },
+  "firing_monitors": [
+    {
+      "type": "synthetics",
+      "signal": "synthetic_check",
+      "metric": "synthetics.http.response.time",
+      "current_value": 4200.0,
+      "threshold": 1000.0,
+      "status": "triggered",
+      "tags": [
+        "service:auth-service",
+        "env:prod",
+        "team:platform",
+        "notify:@observability-team@company.com",
+        "pagerduty:platform-escalation"
+      ]
+    }
+  ],
+  "quiet_monitors": [
+    {
+      "type": "apm",
+      "signal": "latency",
+      "metric": "trace.web.request.duration",
+      "current_value": 145.0,
+      "threshold": 200.0,
+      "status": "ok",
+      "tags": [
+        "service:auth-service",
+        "env:prod"
+      ]
+    },
+    {
+      "type": "apm",
+      "signal": "errors",
+      "metric": "trace.web.request.errors",
+      "current_value": 0.02,
+      "threshold": 0.1,
+      "status": "ok",
+      "tags": [
+        "service:auth-service",
+        "env:prod"
+      ]
+    },
+    {
+      "type": "apm",
+      "signal": "saturation",
+      "metric": "system.cpu.utilization",
+      "current_value": 38.0,
+      "threshold": 80.0,
+      "status": "ok",
+      "tags": [
+        "service:auth-service",
+        "env:prod"
+      ]
+    },
+    {
+      "type": "apm",
+      "signal": "traffic",
+      "metric": "trace.web.request.hits",
+      "current_value": 920.0,
+      "threshold": 500.0,
+      "status": "ok",
+      "tags": [
+        "service:auth-service",
+        "env:prod"
+      ]
+    }
+  ]
+}
