@@ -38,20 +38,17 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-
-from dotenv import load_dotenv
-
-# load_dotenv must be called before importing agent modules
-# Reference: options-income-advisor-agent friction log — load_dotenv timing
-load_dotenv()
-
 from langsmith import Client
 from langsmith.evaluation import evaluate
 from langsmith.schemas import Example, Run
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
-
 from agent.graph import graph
+from dotenv import load_dotenv
+
+# load_dotenv must be called before importing agent modules
+# Reference: options-income-advisor-agent friction log — load_dotenv timing
+load_dotenv()
 
 # LLM judge client — used by LLM-as-a-judge evaluators
 # Initialized once at module level, shared across evaluator calls
