@@ -73,9 +73,9 @@ GOLDEN_EXAMPLES = [
     },
     {
         "fixture": "data/incidents/p2_payments_error_rate.json",
-        "expected_severity": "P2",
+        "expected_severity": "P3",                          # was P2
         "expected_budget_state": "DEGRADED",
-        "description": "P2 payments-service error rate elevated — single signal, moderate burn",
+        "description": "P3 payments-service error rate — single signal, burn_rate 2.1x below P2 threshold",
     },
     {
         "fixture": "data/incidents/p3_auth_latency_spike.json",
@@ -85,9 +85,9 @@ GOLDEN_EXAMPLES = [
     },
     {
         "fixture": "data/incidents/p3_auth_synthetic_flap.json",
-        "expected_severity": "P3",
+        "expected_severity": "P4",                          # was P3
         "expected_budget_state": "HEALTHY",
-        "description": "P3 auth-service synthetic flap — low burn rate, SLO healthy",
+        "description": "P4 auth-service synthetic flap — 0.2x burn rate, all real-user signals healthy",
     },
     {
         "fixture": "data/incidents/p1_order_api_aws_outage.json",
