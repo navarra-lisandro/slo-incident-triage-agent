@@ -17,4 +17,4 @@ test:
 	poetry run pytest tests/ --cov=agent || [ $$? -eq 5 ]
 
 eval:
-	poetry run python evals/run_evals.py
+	poetry run python -m evals.run_evals
