@@ -189,3 +189,71 @@ management agent patterns should explicitly document the enrichment
 layer requirement. The gap between "raw monitoring webhook" and
 "fully assembled incident context" is non-obvious and represents
 significant integration work for production deployments.
+
+---
+
+## Friction #6 — LangSmith Applications do not scope datasets
+
+**Discovery:** During evals/run_evals.py setup and LangSmith UI navigation.
+
+**Problem:** Datasets in LangSmith are workspace-level, not Application-level.
+When working inside an Application context, the Datasets & Experiments
+tab shows an empty "create a dataset" prompt rather than the datasets
+associated with that Application's experiments. This is confusing — a
+developer building an agent expects all evaluation artifacts to be
+grouped under the Application they created for that project.
+
+The dataset created by run_evals.py exists at the workspace level and
+is only accessible at smith.langchain.com/datasets, not from within
+the Application view.
+
+**Impact:** A developer following the "create an Application first"
+workflow (which LangSmith recommends to avoid trace migration issues)
+will not find their evaluation datasets inside the Application. The
+connection between Application traces and workspace-level datasets is
+not surfaced in the UI.
+
+**Suggested improvement:** LangSmith should either scope datasets to
+Applications or clearly surface the relationship between Application
+traces and workspace-level evaluation datasets from within the
+Application view.
+
+---
+
+## Friction #7 — LangSmith heat map colors require manual configuration and page reload
+
+**Discovery:** During first evaluation run review in LangSmith UI.
+
+**Problem:** After running evaluate() and viewing results, score columns
+show plain numbers with no color coding. Color coding requires:
+
+  1. Opening the Experiment View Configuration panel (not obvious)
+  2. Clicking the Heat Map swatch for each feedback column individually
+  3. Verifying "Enable colors" is toggled ON per column
+  4. Checking "Apply to all experiments" before saving (easy to miss)
+  5. Navigating away and back to the experiment for colors to render
+
+None of these steps are documented in the evaluate() quickstart guide.
+A developer running their first evaluation expects color coding to appear
+automatically based on the 0-1 score scale.
+
+Additionally, there is no programmatic way to configure heat map settings
+from the SDK — it must be done manually in the UI per dataset, and the
+configuration does not persist automatically across new datasets.
+
+**Impact:** First-time users will see plain number scores and assume color
+coding is not supported, missing a key feature of the evaluation UI.
+
+**Suggested improvement:** LangSmith should apply default heat map
+coloring automatically for any feedback score in the 0.0-1.0 range,
+with the option to customize thresholds. The current manual configuration
+requirement creates unnecessary friction for the most common use case.
+
+**Screenshots:**
+
+Column Configuration panel — heat map toggle per feedback column:
+![Column Configuration](docs/images/friction/friction-7-column-config.png)
+
+Heat Map configuration popup — Enable colors + threshold settings:
+![Heat Map Config](docs/images/friction/friction-7-heatmap-config.png)
+
