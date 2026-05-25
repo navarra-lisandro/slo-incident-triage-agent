@@ -1,0 +1,87 @@
+{
+  "incident_id": "INC-2026-001",
+  "triggered_at": "2026-05-24T02:34:00Z",
+  "service": "payments-service",
+  "slo": {
+    "name": "payments-service availability SLO",
+    "target_pct": 99.9,
+    "burn_rate": 14.4,
+    "error_budget_remaining_pct": 2.1,
+    "window": "1h",
+    "tags": [
+      "service:payments-service",
+      "env:prod",
+      "team:payments"
+    ]
+  },
+  "firing_monitors": [
+    {
+      "type": "apm",
+      "signal": "latency",
+      "metric": "trace.web.request.duration",
+      "current_value": 3200.0,
+      "threshold": 800.0,
+      "status": "triggered",
+      "tags": [
+        "service:payments-service",
+        "env:prod",
+        "team:payments",
+        "notify:@payments-oncall@company.com",
+        "pagerduty:payments-escalation"
+      ]
+    },
+    {
+      "type": "apm",
+      "signal": "saturation",
+      "metric": "aws.rds.connections",
+      "current_value": 498.0,
+      "threshold": 400.0,
+      "status": "triggered",
+      "tags": [
+        "service:payments-service",
+        "env:prod",
+        "team:payments",
+        "aws-service:rds"
+      ]
+    },
+    {
+      "type": "synthetics",
+      "signal": "synthetic_check",
+      "metric": "synthetics.http.response.time",
+      "current_value": 5100.0,
+      "threshold": 2000.0,
+      "status": "triggered",
+      "tags": [
+        "service:payments-service",
+        "env:prod",
+        "team:payments"
+      ]
+    }
+  ],
+  "quiet_monitors": [
+    {
+      "type": "apm",
+      "signal": "errors",
+      "metric": "trace.web.request.errors",
+      "current_value": 0.3,
+      "threshold": 1.0,
+      "status": "ok",
+      "tags": [
+        "service:payments-service",
+        "env:prod"
+      ]
+    },
+    {
+      "type": "apm",
+      "signal": "traffic",
+      "metric": "trace.web.request.hits",
+      "current_value": 1850.0,
+      "threshold": 500.0,
+      "status": "ok",
+      "tags": [
+        "service:payments-service",
+        "env:prod"
+      ]
+    }
+  ]
+}
