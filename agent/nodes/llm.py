@@ -32,7 +32,6 @@ Design decisions:
   ADR-011   graph topology and signal role taxonomy
   ADR-012   runbook architecture
 """
-
 from datetime import datetime, timezone
 from typing import Any
 
@@ -50,6 +49,11 @@ from agent.nodes.schemas import (
     IncidentSummaryOutput,
 )
 
+from dotenv import load_dotenv
+
+# load_dotenv must be called before importing agent modules
+# Reference: options-income-advisor-agent friction log — load_dotenv timing
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # LLM client — shared across all LLM nodes
@@ -57,7 +61,6 @@ from agent.nodes.schemas import (
 # Reference: https://reference.langchain.com/python/integrations/
 #            langchain_anthropic/ChatAnthropic/
 # ---------------------------------------------------------------------------
-
 llm = ChatAnthropic(
     model="claude-sonnet-4-6",
     temperature=0,

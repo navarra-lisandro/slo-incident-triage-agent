@@ -54,7 +54,11 @@ load_dotenv()
 # Initialized once at module level, shared across evaluator calls
 # Reference: https://reference.langchain.com/python/integrations/
 #            langchain_anthropic/ChatAnthropic/
-judge_llm = ChatAnthropic(model="claude-sonnet-4-6", temperature=0)
+judge_llm = ChatAnthropic(
+    model="claude-sonnet-4-6", 
+    temperature=0,
+    api_key=os.environ.get("ANTHROPIC_API_KEY"),
+)
 
 # ---------------------------------------------------------------------------
 # Dataset configuration
@@ -72,7 +76,7 @@ GOLDEN_EXAMPLES = [
         "description": "P1 payments-service resource exhaustion — latency + saturation + synthetics firing",
     },
     {
-        "fixture": "data/incidents/p2_payments_error_rate.json",
+        "fixture": "data/incidents/p3_payments_error_rate.json",
         "expected_severity": "P3",                          # was P2
         "expected_budget_state": "DEGRADED",
         "description": "P3 payments-service error rate — single signal, burn_rate 2.1x below P2 threshold",
@@ -84,7 +88,7 @@ GOLDEN_EXAMPLES = [
         "description": "P3 auth-service latency spike — single signal, SLO healthy",
     },
     {
-        "fixture": "data/incidents/p3_auth_synthetic_flap.json",
+        "fixture": "data/incidents/p4_auth_synthetic_flap.json",
         "expected_severity": "P4",                          # was P3
         "expected_budget_state": "HEALTHY",
         "description": "P4 auth-service synthetic flap — 0.2x burn rate, all real-user signals healthy",
