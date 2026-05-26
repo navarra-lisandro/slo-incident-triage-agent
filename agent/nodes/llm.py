@@ -32,7 +32,6 @@ Design decisions:
   ADR-011   graph topology and signal role taxonomy
   ADR-012   runbook architecture
 """
-import os
 from datetime import datetime, timezone
 from typing import Any
 
