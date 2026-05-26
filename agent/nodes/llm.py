@@ -65,7 +65,6 @@ load_dotenv()
 llm = ChatAnthropic(
     model="claude-sonnet-4-6",
     temperature=0,
-    api_key=os.environ.get("ANTHROPIC_API_KEY"),
 )
 
 
