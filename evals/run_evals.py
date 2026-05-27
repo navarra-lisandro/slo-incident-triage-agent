@@ -43,12 +43,12 @@ from langsmith.evaluation import evaluate
 from langsmith.schemas import Example, Run
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
-from agent.graph import graph
 from dotenv import load_dotenv
 
 # load_dotenv must be called before importing agent modules
 # Reference: options-income-advisor-agent friction log — load_dotenv timing
 load_dotenv()
+from agent.graph import graph
 
 # LLM judge client — used by LLM-as-a-judge evaluators
 # Initialized once at module level, shared across evaluator calls
@@ -56,8 +56,7 @@ load_dotenv()
 #            langchain_anthropic/ChatAnthropic/
 judge_llm = ChatAnthropic(
     model="claude-sonnet-4-6", 
-    temperature=0,
-    api_key=os.environ.get("ANTHROPIC_API_KEY"),
+    temperature=0
 )
 
 # ---------------------------------------------------------------------------
