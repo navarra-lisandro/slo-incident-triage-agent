@@ -36,6 +36,7 @@ Usage:
 import json
 import os
 import sys
+import argparse
 from pathlib import Path
 from typing import Any
 from langsmith import Client
@@ -93,8 +94,8 @@ GOLDEN_EXAMPLES = [
         "description": "P4 auth-service synthetic flap — 0.2x burn rate, all real-user signals healthy",
     },
     {
-        "fixture": "data/incidents/p1_order_api_aws_outage.json",
-        "expected_severity": "P2",                    # was P1
+        "fixture": "data/incidents/p2_order_api_aws_outage.json",  # was p1_
+        "expected_severity": "P2",
         "expected_budget_state": "DEGRADED",
         "description": "P2 order-api AWS outage — burn_rate 6.0x, full path with cloud status check",
     },
@@ -424,10 +425,21 @@ def main() -> None:
       3. Print results summary
       4. View full results in LangSmith UI
     """
-    print(f"[OK] Starting evaluation — dataset: {DATASET_NAME}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--create-dataset-only",
+        action="store_true",
+        help="Create the dataset without running evaluation"
+    )
+
+    args = parser.parse_args()
 
     client = Client()
     dataset_name = create_or_get_dataset(client)
+
+    if args.create_dataset_only:
+        print(f"[OK] Dataset '{dataset_name}' ready. Run 'make eval' to evaluate.")
+        return
 
     print(f"[OK] Running evaluate() against {len(GOLDEN_EXAMPLES)} examples...")
 
