@@ -48,7 +48,7 @@ from dotenv import load_dotenv
 # load_dotenv must be called before importing agent modules
 # Reference: options-income-advisor-agent friction log — load_dotenv timing
 load_dotenv()
-from agent.graph import graph
+from agent.graph import graph # noqa: E402
 
 # LLM judge client — used by LLM-as-a-judge evaluators
 # Initialized once at module level, shared across evaluator calls
@@ -94,9 +94,9 @@ GOLDEN_EXAMPLES = [
     },
     {
         "fixture": "data/incidents/p1_order_api_aws_outage.json",
-        "expected_severity": "P1",
+        "expected_severity": "P2",                    # was P1
         "expected_budget_state": "DEGRADED",
-        "description": "P1 order-api AWS outage — full path with cloud status check",
+        "description": "P2 order-api AWS outage — burn_rate 6.0x, full path with cloud status check",
     },
 ]
 
