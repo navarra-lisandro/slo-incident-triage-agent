@@ -1,0 +1,34 @@
+# docker-compose.yml
+#
+# Local container orchestration for slo-incident-triage-agent.
+# Builds and runs the agent container locally using the Dockerfile.
+#
+# Usage:
+#   docker compose up --build    build image and start container
+#   docker compose up            start container (no rebuild)
+#   docker compose down          stop and remove container
+#
+# Credentials are loaded from .env file (ADR-015).
+# Production deployment uses Helm + K8s secrets, not docker-compose.
+#
+# Reference: https://docs.docker.com/compose/
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: slo-incident-triage-agent:local
+    container_name: slo-incident-triage-agent
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
