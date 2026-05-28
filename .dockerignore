@@ -16,7 +16,6 @@ __pycache__
 .env.*
 !.env.example
 .python-version
-poetry.lock
 
 # testing
 tests/
