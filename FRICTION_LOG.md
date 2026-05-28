@@ -241,6 +241,12 @@ Additionally, there is no programmatic way to configure heat map settings
 from the SDK — it must be done manually in the UI per dataset, and the
 configuration does not persist automatically across new datasets.
 
+**Workaround:** After enabling heat map colors, toggle "Higher = better" 
+off and back on for each feedback column before saving. Simply enabling 
+the heat map toggle without making an additional change does not trigger 
+the color rendering. The state change on any setting forces the 
+configuration to apply correctly.
+
 **Impact:** First-time users will see plain number scores and assume color
 coding is not supported, missing a key feature of the evaluation UI.
 

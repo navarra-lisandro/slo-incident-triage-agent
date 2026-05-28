@@ -36,6 +36,7 @@ Usage:
 import json
 import os
 import sys
+import argparse
 from pathlib import Path
 from typing import Any
 from langsmith import Client
@@ -43,12 +44,12 @@ from langsmith.evaluation import evaluate
 from langsmith.schemas import Example, Run
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
-from agent.graph import graph
 from dotenv import load_dotenv
 
 # load_dotenv must be called before importing agent modules
 # Reference: options-income-advisor-agent friction log — load_dotenv timing
 load_dotenv()
+from agent.graph import graph # noqa: E402
 
 # LLM judge client — used by LLM-as-a-judge evaluators
 # Initialized once at module level, shared across evaluator calls
@@ -56,8 +57,7 @@ load_dotenv()
 #            langchain_anthropic/ChatAnthropic/
 judge_llm = ChatAnthropic(
     model="claude-sonnet-4-6", 
-    temperature=0,
-    api_key=os.environ.get("ANTHROPIC_API_KEY"),
+    temperature=0
 )
 
 # ---------------------------------------------------------------------------
@@ -94,10 +94,10 @@ GOLDEN_EXAMPLES = [
         "description": "P4 auth-service synthetic flap — 0.2x burn rate, all real-user signals healthy",
     },
     {
-        "fixture": "data/incidents/p1_order_api_aws_outage.json",
-        "expected_severity": "P1",
+        "fixture": "data/incidents/p2_order_api_aws_outage.json",  # was p1_
+        "expected_severity": "P2",
         "expected_budget_state": "DEGRADED",
-        "description": "P1 order-api AWS outage — full path with cloud status check",
+        "description": "P2 order-api AWS outage — burn_rate 6.0x, full path with cloud status check",
     },
 ]
 
@@ -425,10 +425,21 @@ def main() -> None:
       3. Print results summary
       4. View full results in LangSmith UI
     """
-    print(f"[OK] Starting evaluation — dataset: {DATASET_NAME}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--create-dataset-only",
+        action="store_true",
+        help="Create the dataset without running evaluation"
+    )
+
+    args = parser.parse_args()
 
     client = Client()
     dataset_name = create_or_get_dataset(client)
+
+    if args.create_dataset_only:
+        print(f"[OK] Dataset '{dataset_name}' ready. Run 'make eval' to evaluate.")
+        return
 
     print(f"[OK] Running evaluate() against {len(GOLDEN_EXAMPLES)} examples...")
 
