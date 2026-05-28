@@ -1,0 +1,38 @@
+# version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv
+*.egg-info
+
+# development
+.env
+.env.*
+!.env.example
+.python-version
+poetry.lock
+
+# testing
+tests/
+evals/
+.pytest_cache
+.coverage
+htmlcov/
+
+# documentation
+docs/
+*.md
+!README.md
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
