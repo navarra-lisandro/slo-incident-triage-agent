@@ -42,7 +42,7 @@ RUN poetry config virtualenvs.in-project true && \
 # Stage 2 — runtime
 # Lean production image — no Poetry, no build tools
 # ---------------------------------------------------------------------------
-FROM python:3.11.9-slim AS runtime
+FROM python:3.11.9-slim-bookworm AS runtime
 
 WORKDIR /app
 
