@@ -17,5 +17,8 @@ test:
 	# TODO: restore --cov-fail-under=100 after first tests written — DONE
 	poetry run pytest tests/ --cov=agent || [ $$? -eq 5 ]
 
+dataset:
+	poetry run python -m evals.run_evals --create-dataset-only
+
 eval:
 	poetry run python -m evals.run_evals
