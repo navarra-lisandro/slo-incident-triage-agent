@@ -22,3 +22,20 @@ dataset:
 
 eval:
 	poetry run python -m evals.run_evals
+
+helm-install:
+	helm install slo-incident-triage-agent ./helm \
+		--namespace slo-incident-triage-agent \
+		--create-namespace
+
+helm-upgrade:
+	helm upgrade slo-incident-triage-agent ./helm \
+		--namespace slo-incident-triage-agent
+
+helm-uninstall:
+	helm uninstall slo-incident-triage-agent \
+		--namespace slo-incident-triage-agent
+
+helm-status:
+	helm status slo-incident-triage-agent \
+		--namespace slo-incident-triage-agent

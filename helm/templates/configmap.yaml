@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+data:
+  LANGSMITH_TRACING: {{ .Values.config.langsmithTracing | quote }}
+  LANGSMITH_ENDPOINT: {{ .Values.config.langsmithEndpoint | quote }}
+  LANGCHAIN_PROJECT: {{ .Values.config.langchainProject | quote }}
