@@ -1,0 +1,18 @@
+apiVersion: v2
+name: slo-incident-triage-agent
+description: >
+  LangGraph agent that triages SLO burn rate incidents by reasoning
+  over correlated APM golden signals, synthetics, and monitor states
+  to classify severity and generate remediation recommendations.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - sre
+  - incident-triage
+  - langgraph
+  - langsmith
+  - slo
+maintainers:
+  - name: Lisandro Navarra
+    email: lisandro.navarra.work@gmail.com

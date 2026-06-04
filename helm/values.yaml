@@ -1,0 +1,71 @@
+# helm/values.yaml
+#
+# Default values for slo-incident-triage-agent.
+# Override with --set or a custom values file.
+#
+# Secrets are NOT stored here — they live in a K8s secret
+# provisioned before helm install. See ADR-015.
+
+replicaCount: 1
+
+image:
+  repository: slo-incident-triage-agent
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: false
+  className: ""
+  host: slo-incident-triage-agent.local
+  path: /
+  pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "1Gi"
+
+# name of the K8s secret containing API keys (ADR-015)
+# provisioned before helm install:
+#   kubectl create secret generic slo-incident-triage-agent-secrets \
+#     --from-literal=ANTHROPIC_API_KEY=<value> \
+#     --from-literal=LANGSMITH_API_KEY=<value> \
+#     -n slo-incident-triage-agent
+secretName: slo-incident-triage-agent-secrets
+
+# non-secret environment configuration
+config:
+  langsmithTracing: "true"
+  langsmithEndpoint: "https://api.smith.langchain.com"
+  langchainProject: "slo-incident-triage-agent"
+
+# health check configuration
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# namespace to deploy into
+namespace: slo-incident-triage-agent
